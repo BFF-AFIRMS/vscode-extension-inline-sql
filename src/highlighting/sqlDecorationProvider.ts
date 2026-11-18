@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { documentSqlRegions } from '../configuration';
+import { documentSqlRegions, SUPPORTED_LANGUAGES } from '../configuration';
+import { findPerlInterpolationSpans } from '../detection/interpolations';
 import { SQL_STATEMENT_KEYWORDS, SQL_CLAUSE_KEYWORDS } from '../detection/patterns';
 
 // Build keyword sets for categorized highlighting
@@ -179,8 +180,7 @@ export class SqlDecorationProvider implements vscode.Disposable {
     const doc = editor.document;
     const languageId = doc.languageId;
 
-    const supportedLanguages = ['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python', 'java', 'csharp'];
-    if (!supportedLanguages.includes(languageId)) {
+    if (!SUPPORTED_LANGUAGES.includes(languageId)) {
       this.clearDecorations(editor);
       return;
     }
@@ -220,12 +220,42 @@ export class SqlDecorationProvider implements vscode.Disposable {
         commentRanges.push({ range: new vscode.Range(startPos, endPos) });
       }
 
+      // Match interpolation variables: {expr}, ${expr}, or Perl $var / @arr / ${expr}
+      // Computed before bracket identifiers so subscripts like $arr[0] are not misread as [0] columns
+      const interpolationSpans: Array<{ start: number; end: number }> = [];
+      if (languageId === 'perl') {
+        if ((region.literal?.interpolationWidth ?? 0) > 0) {
+          for (const span of findPerlInterpolationSpans(regionText)) {
+            if (commentSpans.some(c => span.start >= c.start && span.start < c.end)) { continue; }
+            interpolationSpans.push(span);
+            const startPos = doc.positionAt(region.startOffset + span.start);
+            const endPos = doc.positionAt(region.startOffset + span.end);
+            interpolationRanges.push({ range: new vscode.Range(startPos, endPos) });
+          }
+        }
+      } else {
+        const interpolationPattern = /\$?\{[^}]+\}/g;
+        for (match of regionText.matchAll(interpolationPattern)) {
+          const matchStart = match.index;
+          const matchEnd = match.index + match[0].length;
+          // Skip if inside a comment
+          if (commentSpans.some(c => matchStart >= c.start && matchStart < c.end)) { continue; }
+          // Skip escaped braces {{ }}
+          if (matchStart > 0 && regionText[matchStart] === '{' && regionText[matchStart - 1] === '{') { continue; }
+          interpolationSpans.push({ start: matchStart, end: matchEnd });
+          const startPos = doc.positionAt(region.startOffset + matchStart);
+          const endPos = doc.positionAt(region.startOffset + matchEnd);
+          interpolationRanges.push({ range: new vscode.Range(startPos, endPos) });
+        }
+      }
+
       // Match bracket identifiers: [column_name] etc.
       const bracketSpans: Array<{ start: number; end: number }> = [];
       for (match of regionText.matchAll(bracketIdentifierPattern)) {
-        if (commentSpans.some(c => match!.index >= c.start && match!.index < c.end)) { continue; }
         const matchStart = match.index;
         const matchEnd = match.index + match[0].length;
+        if (commentSpans.some(c => matchStart >= c.start && matchStart < c.end)) { continue; }
+        if (interpolationSpans.some(s => matchStart > s.start && matchStart < s.end)) { continue; }
         bracketSpans.push({ start: matchStart, end: matchEnd });
 
         // Color the opening bracket [
@@ -236,9 +266,9 @@ export class SqlDecorationProvider implements vscode.Disposable {
         // Color the content inside brackets as identifier, splitting around interpolations
         const innerContentStart = matchStart + 1;
         const innerContentEnd = matchEnd - 1;
-        const innerText = regionText.slice(innerContentStart, innerContentEnd);
-        // Find interpolations within bracket content and split identifier ranges
-        const innerInterpolations = [...innerText.matchAll(/\$?\{[^}]+\}/g)];
+        const innerInterpolations = interpolationSpans.filter(
+          s => s.start >= innerContentStart && s.end <= innerContentEnd
+        );
         if (innerInterpolations.length === 0) {
           // No interpolations — color entire content as identifier
           const innerStart = doc.positionAt(region.startOffset + innerContentStart);
@@ -246,17 +276,17 @@ export class SqlDecorationProvider implements vscode.Disposable {
           identifierRanges.push({ range: new vscode.Range(innerStart, innerEnd) });
         } else {
           // Split around interpolations: color non-interpolation parts as identifier
-          let cursor = 0;
-          for (const im of innerInterpolations) {
-            if (im.index > cursor) {
-              const partStart = doc.positionAt(region.startOffset + innerContentStart + cursor);
-              const partEnd = doc.positionAt(region.startOffset + innerContentStart + im.index);
+          let cursor = innerContentStart;
+          for (const span of innerInterpolations) {
+            if (span.start > cursor) {
+              const partStart = doc.positionAt(region.startOffset + cursor);
+              const partEnd = doc.positionAt(region.startOffset + span.start);
               identifierRanges.push({ range: new vscode.Range(partStart, partEnd) });
             }
-            cursor = im.index + im[0].length;
+            cursor = span.end;
           }
-          if (cursor < innerText.length) {
-            const partStart = doc.positionAt(region.startOffset + innerContentStart + cursor);
+          if (cursor < innerContentEnd) {
+            const partStart = doc.positionAt(region.startOffset + cursor);
             const partEnd = doc.positionAt(region.startOffset + innerContentEnd);
             identifierRanges.push({ range: new vscode.Range(partStart, partEnd) });
           }
@@ -266,23 +296,6 @@ export class SqlDecorationProvider implements vscode.Disposable {
         const closeStart = doc.positionAt(region.startOffset + matchEnd - 1);
         const closeEnd = doc.positionAt(region.startOffset + matchEnd);
         bracketRanges.push({ range: new vscode.Range(closeStart, closeEnd) });
-      }
-
-      // Match interpolation variables: {expr}, ${expr}
-      // These are host language expressions embedded in SQL strings
-      const interpolationPattern = /\$?\{[^}]+\}/g;
-      const interpolationSpans: Array<{ start: number; end: number }> = [];
-      for (match of regionText.matchAll(interpolationPattern)) {
-        const matchStart = match.index;
-        const matchEnd = match.index + match[0].length;
-        // Skip if inside a comment
-        if (commentSpans.some(c => matchStart >= c.start && matchStart < c.end)) { continue; }
-        // Skip escaped braces {{ }}
-        if (matchStart > 0 && regionText[matchStart] === '{' && regionText[matchStart - 1] === '{') { continue; }
-        interpolationSpans.push({ start: matchStart, end: matchEnd });
-        const startPos = doc.positionAt(region.startOffset + matchStart);
-        const endPos = doc.positionAt(region.startOffset + matchEnd);
-        interpolationRanges.push({ range: new vscode.Range(startPos, endPos) });
       }
 
       // Helper: check if an offset falls inside a comment, bracket, or interpolation

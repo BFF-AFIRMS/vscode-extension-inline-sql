@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { detectSqlRegions } from './detection/sqlDetector';
 import { SqlRegion } from './types';
 
-export const SUPPORTED_LANGUAGES = ['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python', 'java', 'csharp'];
+export const SUPPORTED_LANGUAGES = ['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python', 'java', 'csharp', 'perl'];
 
 export function documentSqlRegions(document: vscode.TextDocument): SqlRegion[] {
   const config = vscode.workspace.getConfiguration('inlineSql', document.uri);

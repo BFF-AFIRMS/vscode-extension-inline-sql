@@ -19,9 +19,11 @@ export interface StringLiteral {
   /** The raw string content */
   content: string;
   /** Type of string literal */
-  type: 'single' | 'double' | 'template' | 'triple' | 'verbatim' | 'raw' | 'textblock';
+  type: 'single' | 'double' | 'template' | 'triple' | 'verbatim' | 'raw' | 'textblock' | 'heredoc';
   interpolationWidth?: number;
   raw?: boolean;
+  /** Leading indentation of a heredoc's closing delimiter (e.g. Perl <<~SQL) */
+  closingIndent?: string;
 }
 
 export interface DbConnectionConfig {

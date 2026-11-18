@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { documentSqlRegions } from '../configuration';
+import { documentSqlRegions, SUPPORTED_LANGUAGES } from '../configuration';
 import { SqlRegion } from '../types';
 
 import { Parser } from 'node-sql-parser';
@@ -16,6 +16,7 @@ const LANGUAGE_DIALECT_MAP: Record<string, string> = {
   csharp: 'TransactSQL',
   java: 'MySQL',
   python: 'MySQL',
+  perl: 'MySQL',
   typescript: 'MySQL',
   javascript: 'MySQL',
   typescriptreact: 'MySQL',
@@ -39,11 +40,6 @@ const MULTI_STATEMENT_PATTERN = /^\s*(?:SET\s+|BEGIN\s+|DECLARE\s+)/i;
  * but cannot be parsed standalone (e.g. used with StringBuilder).
  */
 const SQL_FRAGMENT_PATTERN = /^\s*(?:UNION\s+ALL|UNION|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET|AND\s+|OR\s+|ON\s+|ELSE|END)\b/i;
-
-const SUPPORTED_LANGUAGES = [
-  'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
-  'python', 'java', 'csharp',
-];
 
 export class SqlDiagnosticsProvider implements vscode.Disposable {
   private diagnosticCollection: vscode.DiagnosticCollection;
@@ -154,7 +150,7 @@ export class SqlDiagnosticsProvider implements vscode.Disposable {
 
     // Replace standalone @__p__ or __P__ in SELECT column position with a literal 1
     // e.g. "SELECT {MessageColumns}" → "SELECT @__p__" → "SELECT 1"
-    s = s.replace(/(?<=SELECT\s+)(?:@__p__|__P__)/gi, '1');
+    s = s.replace(/(?<=SELECT\s+)(?:@__p__|__P__)(?![\w$.])/gi, '1');
 
     // Normalize bracket identifiers for non-TransactSQL dialects only.
     // TransactSQL (SQL Server) supports [bracket] identifiers natively in node-sql-parser;
@@ -186,6 +182,11 @@ export class SqlDiagnosticsProvider implements vscode.Disposable {
     // Replace placeholders in table positions with valid table name
     // e.g. INNER JOIN @__p__ → INNER JOIN _T_, FROM __P__ → FROM _T_
     s = s.replace(/(?<=\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+)(?:@__p__|__P__)/gi, '_T_');
+
+    // Placeholders embedded inside or qualifying an identifier (e.g. ${prefix}_users, db.$table, $alias.id)
+    // become valid identifier characters rather than an invalid leading digit
+    s = s.replace(/([\w$.])(?:@__p__|__P__)/g, '$1_P_');
+    s = s.replace(/(?:@__p__|__P__)(?=[\w$.])/g, '_P_');
 
     // Replace remaining @param / placeholder references with literals for parser compatibility
     // e.g. @node → 1, @nodeChecksum → 1, __P__ → 1 (keeps SQL structurally valid)

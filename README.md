@@ -26,6 +26,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes and [CONTRIBUTING.md](CONTRIB
 | Python | Single/double/triple quotes, f-strings |
 | Java | Double quotes, text blocks (`"""`) |
 | C# | Regular, verbatim (`@"`), interpolated (`$"`), raw string literals (`$"""`) |
+| Perl | Single/double quotes, quote-like operators (`q`, `qq`), heredocs (`<<`, `<<~`) |
 
 ## Features
 
@@ -75,7 +76,7 @@ All settings are under the `inlineSql.*` namespace.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `inlineSql.languages` | string[] | all supported languages | Enabled VS Code language IDs: `typescript`, `javascript`, `typescriptreact`, `javascriptreact`, `python`, `java`, `csharp` |
+| `inlineSql.languages` | string[] | all supported languages | Enabled VS Code language IDs: `typescript`, `javascript`, `typescriptreact`, `javascriptreact`, `python`, `java`, `csharp`, `perl` |
 | `inlineSql.detection.minKeywords` | integer | `2` | Minimum distinct SQL keywords for scoring-based detection; range 1–100. Strings starting with a SQL statement keyword use the fast path instead. |
 
 ### Validation
@@ -90,7 +91,7 @@ When set to `auto`, the dialect is inferred from the host language:
 | Host Language | Dialect |
 |---------------|---------|
 | C# | TransactSQL |
-| TypeScript / TSX, JavaScript / JSX, Python, Java | MySQL |
+| TypeScript / TSX, JavaScript / JSX, Python, Java, Perl | MySQL |
 
 ### Formatting
 
@@ -189,4 +190,5 @@ Schema completion refreshes expired metadata on demand. Use **Inline SQL: Refres
 
 ## License
 
-MIT
+Perl language support: GPLv3
+Original upstream sources: MIT

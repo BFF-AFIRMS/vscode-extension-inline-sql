@@ -21,7 +21,8 @@
     "onLanguage:java",
     "onLanguage:csharp",
     "onLanguage:typescriptreact",
-    "onLanguage:javascriptreact"
+    "onLanguage:javascriptreact",
+    "onLanguage:perl"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -52,7 +53,8 @@
             "javascriptreact",
             "python",
             "java",
-            "csharp"
+            "csharp",
+            "perl"
           ],
           "description": "Enabled host languages for SQL detection",
           "items": {
@@ -228,7 +230,8 @@
     "images/icon.png",
     "README.md",
     "LICENSE",
+    "LICENSE.upstream",
     "CHANGELOG.md"
   ],
-  "license": "MIT"
+  "license": "GPL-3.0-only"
 }

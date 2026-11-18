@@ -4,11 +4,7 @@ import { SqlCompletionProvider } from './completion/sqlCompletionProvider';
 import { ConnectionManager } from './db/connectionManager';
 import { SqlDiagnosticsProvider } from './validation/sqlDiagnosticsProvider';
 import { SqlFormattingProvider } from './formatting/sqlFormattingProvider';
-
-const SUPPORTED_LANGUAGES = [
-  'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
-  'python', 'java', 'csharp',
-];
+import { SUPPORTED_LANGUAGES } from './configuration';
 
 export function activate(context: vscode.ExtensionContext): void {
   // SQL decoration-based highlighting (works even with semantic tokenization)

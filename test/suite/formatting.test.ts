@@ -84,4 +84,33 @@ describe('Safe SQL formatting', () => {
     assert.ok(result.includes('${userId}'));
     assert.ok(!result.toLowerCase().includes('__inline_sql_expr_'));
   });
+
+  it('formats Perl SQL and preserves scalar, deref, subscript, and capture interpolations', () => {
+    const source = 'my $q = "select id from $$table_ref where id = $user->{id} and idx <= $#items and grp = $1";';
+    const literal = extractStrings(source, 'perl')[0];
+    const result = formatLiteral(literal, 'perl', { ...options, identifierCase: 'lower' });
+    assert.ok(result.includes('$$table_ref'));
+    assert.ok(result.includes('$user->{id}'));
+    assert.ok(result.includes('$#items'));
+    assert.ok(result.includes('$1'));
+    assert.ok(!result.toLowerCase().includes('__inline_sql_expr_'));
+  });
+
+  it('formats Perl <<SQL and <<~SQL heredocs idempotently with valid delimiter indentation', () => {
+    const indentedSource = 'sub f {\n    my $q = <<~SQL;\n        select id, name from users where id = $id\n        SQL\n}\n';
+    const indentedLiteral = extractStrings(indentedSource, 'perl')[0];
+    const first = formatLiteral(indentedLiteral, 'perl', options, '        ');
+    const lines = first.slice(0, -1).split('\n');
+    assert.ok(lines.every(line => line.startsWith('        ')), `Expected >=8-space indent on every line:\n${first}`);
+    assert.ok(first.endsWith('\n'));
+
+    const updatedSource = indentedSource.slice(0, indentedLiteral.contentStart) + first + indentedSource.slice(indentedLiteral.contentEnd);
+    const second = formatLiteral(extractStrings(updatedSource, 'perl')[0], 'perl', options, '        ');
+    assert.strictEqual(second, first);
+
+    const plainSource = '    my $q = <<SQL;\nselect id from users\nSQL\n';
+    const plainFormatted = formatLiteral(extractStrings(plainSource, 'perl')[0], 'perl', options, '    ');
+    assert.ok(plainFormatted.startsWith('SELECT\n'));
+    assert.ok(plainFormatted.endsWith('\n'));
+  });
 });

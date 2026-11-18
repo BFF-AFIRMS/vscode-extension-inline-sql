@@ -53,7 +53,14 @@ export function formatLiteral(
     // In raw strings, an escaped newline would become literal backslash+n.
     throw new Error('Single-line raw strings are left unchanged.');
   }
-  if (multiline) {
+  if (literal.type === 'heredoc') {
+    const heredocIndent = literal.closingIndent ?? '';
+    const trailing = literal.content.match(/\r?\n$/)?.[0] ?? '';
+    const eol = trailing === '\r\n' ? '\r\n' : '\n';
+    formatted = formatted.split('\n').map(line =>
+      line.length > 0 ? heredocIndent + line : ''
+    ).join(eol) + trailing;
+  } else if (multiline) {
     // Preserve SQL's own indentation and the host's opening/closing line layout.
     const leading = literal.content.match(/^\s*\r?\n/)?.[0] ?? '';
     const trailing = literal.content.match(/\r?\n[\t ]*$/)?.[0] ?? '';

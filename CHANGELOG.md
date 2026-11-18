@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3 (November 18, 2026)
+
+### Added
+
+- Perl support
+- Improved error logging
+
 ## 0.2.1
 
 ### Fixed

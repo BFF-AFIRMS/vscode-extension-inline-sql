@@ -149,6 +149,53 @@ describe('detectSqlRegions', () => {
     });
   });
 
+  describe('Perl', () => {
+    it('should detect SQL in single, double, and multiline double-quoted strings', () => {
+      const code = [
+        'my $q1 = "SELECT id, name FROM users WHERE active = 1";',
+        "my $q2 = 'DELETE FROM sessions WHERE expires_at < NOW()';",
+        'my $q3 = "SELECT id, name\nFROM accounts\nWHERE active = 1";',
+        'my $after = "Hello, World!";',
+      ].join('\n');
+      const regions = detectSqlRegions(code, 'perl');
+      assert.strictEqual(regions.length, 3);
+    });
+
+    it('should detect SQL in q, qq, and heredocs', () => {
+      const code = [
+        'my $a = q{SELECT id FROM users};',
+        'my $b = qq{SELECT * FROM $table WHERE id = $user->{id}};',
+        'my $c = <<~SQL;',
+        '    SELECT id, name FROM users WHERE id = $id',
+        '    SQL',
+      ].join('\n');
+      const regions = detectSqlRegions(code, 'perl');
+      assert.strictEqual(regions.length, 3);
+      assert.ok(regions[1].sqlText.includes('FROM __P__ WHERE id = __P__'));
+    });
+
+    it('should preserve literal sigils in single-quoted Perl strings and non-interpolating heredocs', () => {
+      const single = detectSqlRegions("my $q = 'SELECT * FROM $literal_name';", 'perl');
+      assert.strictEqual(single.length, 1);
+      assert.ok(single[0].sqlText.includes('$literal_name'));
+
+      const heredoc = detectSqlRegions("my $q = <<'SQL';\nSELECT * FROM $literal_name\nSQL\n", 'perl');
+      assert.strictEqual(heredoc.length, 1);
+      assert.ok(heredoc[0].sqlText.includes('$literal_name'));
+    });
+
+    it('should not detect non-SQL strings, qw lists, or POD blocks', () => {
+      const code = [
+        '=pod',
+        'SELECT * FROM pod_users',
+        '=cut',
+        'my @kw = qw(SELECT * FROM users);',
+        'my $msg = "Hello, World!";',
+      ].join('\n');
+      assert.strictEqual(detectSqlRegions(code, 'perl').length, 0);
+    });
+  });
+
   describe('Fixture files', () => {
     const fixturesDir = path.resolve(__dirname, '../../../test/fixtures');
 
@@ -175,6 +222,12 @@ describe('detectSqlRegions', () => {
       const code = fs.readFileSync(path.join(fixturesDir, 'sample.cs'), 'utf8');
       const regions = detectSqlRegions(code, 'csharp');
       assert.ok(regions.length >= 3, `Expected at least 3 SQL regions, got ${regions.length}`);
+    });
+
+    it('should detect SQL regions in Perl fixture', () => {
+      const code = fs.readFileSync(path.join(fixturesDir, 'sample.pl'), 'utf8');
+      const regions = detectSqlRegions(code, 'perl');
+      assert.strictEqual(regions.length, 4);
     });
   });
 });
