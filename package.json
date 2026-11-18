@@ -2,8 +2,8 @@
   "name": "vscode-extension-inline-sql",
   "displayName": "Inline SQL Highlighter",
   "description": "SQL syntax highlighting, autocomplete, validation, and formatting for inline SQL strings",
-  "version": "0.2.1",
-  "publisher": "tutcugil",
+  "version": "0.3.0",
+  "publisher": "BFF-AFIRMS",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.85.0",
@@ -209,7 +209,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/tutcugil/vscode-extension-inline-sql.git"
+    "url": "https://github.com/BFF-AFIRMS/vscode-extension-inline-sql.git"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

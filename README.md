@@ -190,5 +190,5 @@ Schema completion refreshes expired metadata on demand. Use **Inline SQL: Refres
 
 ## License
 
-Perl language support: GPLv3
-Original upstream sources: MIT
+- Perl language support: GPLv3
+- Original upstream sources: MIT
