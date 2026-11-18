@@ -35,6 +35,21 @@ export interface DbConnectionConfig {
   user?: string;
   password?: string;
   passwordEnv?: string;
+  ssl?: boolean | DbSslConfig;
+}
+
+/** TLS options forwarded to `tls.connect`; only the fields the extension validates. */
+export interface DbSslConfig {
+  /** Verify the server certificate chain; set to false only for self-signed development servers. */
+  rejectUnauthorized?: boolean;
+  /** PEM-encoded CA certificate(s) to trust. */
+  ca?: string;
+  /** PEM-encoded client certificate (mutual TLS). */
+  cert?: string;
+  /** PEM-encoded client private key (mutual TLS). */
+  key?: string;
+  /** SNI hostname; defaults to the connection host. */
+  servername?: string;
 }
 
 export interface SchemaInfo {

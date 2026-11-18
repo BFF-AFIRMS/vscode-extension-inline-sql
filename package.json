@@ -2,7 +2,7 @@
   "name": "vscode-extension-inline-sql",
   "displayName": "Inline SQL Highlighter",
   "description": "SQL syntax highlighting, autocomplete, validation, and formatting for inline SQL strings",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "BFF-AFIRMS",
   "icon": "images/icon.png",
   "engines": {
@@ -149,6 +149,35 @@
               "passwordEnv": {
                 "type": "string",
                 "description": "Environment variable containing the database password."
+              },
+              "ssl": {
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "rejectUnauthorized": {
+                        "type": "boolean"
+                      },
+                      "ca": {
+                        "type": "string"
+                      },
+                      "cert": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string"
+                      },
+                      "servername": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "Enable TLS. true verifies the server certificate; an object is passed to tls.connect. Use { \"rejectUnauthorized\": false } for self-signed certificates."
               }
             },
             "required": [

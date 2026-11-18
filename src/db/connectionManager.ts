@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DbConnectionConfig, SchemaInfo, TableInfo } from '../types';
+import { DbConnectionConfig, DbSslConfig, SchemaInfo, TableInfo } from '../types';
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
@@ -178,7 +178,34 @@ function redact(message: string, secrets: Array<string | undefined>): string {
 }
 
 function describeTarget(config: DbConnectionConfig): string {
-  return `${config.driver}://${config.host}:${config.port ?? '?'}/${config.database}`;
+  return `${config.driver}://${config.host}:${config.port ?? '?'}/${config.database}${config.ssl ? ' (tls)' : ''}`;
+}
+
+/** Map the configured `ssl` setting to `tls.connect` options; `false` disables TLS. */
+function resolveSsl(config: DbConnectionConfig): false | DbSslConfig {
+  if (config.ssl === undefined || config.ssl === false) { return false; }
+  // `true` verifies the server certificate; an object is passed through to `tls.connect`.
+  return config.ssl === true ? { rejectUnauthorized: true } : { ...config.ssl };
+}
+
+const SSL_STRING_FIELDS = new Set(['ca', 'cert', 'key', 'servername']);
+
+/** Validate the `ssl` setting shape; returns a message when invalid. */
+function validateSsl(value: unknown): string | undefined {
+  if (value === undefined || typeof value === 'boolean') { return undefined; }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return 'Inline SQL: "ssl" must be a boolean or an object.';
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === 'rejectUnauthorized') {
+      if (typeof entry !== 'boolean') { return 'Inline SQL: "ssl.rejectUnauthorized" must be a boolean.'; }
+    } else if (SSL_STRING_FIELDS.has(key)) {
+      if (typeof entry !== 'string') { return `Inline SQL: "ssl.${key}" must be a string.`; }
+    } else {
+      return `Inline SQL: unsupported SSL option "${key}".`;
+    }
+  }
+  return undefined;
 }
 
 /** Connection timeout in milliseconds */
@@ -250,6 +277,13 @@ export class ConnectionManager implements vscode.Disposable {
     // Validate port range
     if (conn.port !== undefined && (conn.port < 1 || conn.port > 65535 || !Number.isInteger(conn.port))) {
       vscode.window.showErrorMessage('Inline SQL: Invalid port in connection configuration (must be 1-65535).');
+      return undefined;
+    }
+
+    // Validate TLS options
+    const sslError = validateSsl(conn.ssl);
+    if (sslError) {
+      vscode.window.showErrorMessage(sslError);
       return undefined;
     }
 
@@ -370,6 +404,7 @@ export class ConnectionManager implements vscode.Disposable {
       database: config.database,
       user: config.user,
       password: config.password,
+      ssl: resolveSsl(config),
       connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
       query_timeout: CONNECTION_TIMEOUT_MS,
     });
@@ -394,12 +429,14 @@ export class ConnectionManager implements vscode.Disposable {
 
   private async fetchMysqlSchema(config: DbConnectionConfig): Promise<SchemaInfo> {
     const mysql = lazyRequire('mysql2/promise');
+    const ssl = resolveSsl(config);
     const connection = await mysql.createConnection({
       host: config.host,
       port: config.port || 3306,
       database: config.database,
       user: config.user,
       password: config.password,
+      ...(ssl ? { ssl } : {}),
       connectTimeout: CONNECTION_TIMEOUT_MS,
     });
 
@@ -420,13 +457,20 @@ export class ConnectionManager implements vscode.Disposable {
 
   private async fetchMssqlSchema(config: DbConnectionConfig): Promise<SchemaInfo> {
     const mssql = lazyRequire('mssql');
+    const ssl = resolveSsl(config);
     const pool = new mssql.ConnectionPool({
       server: config.host,
       port: config.port || 1433,
       database: config.database,
       user: config.user,
       password: config.password,
-      options: { encrypt: true, trustServerCertificate: false },
+      options: {
+        encrypt: ssl !== false,
+        trustServerCertificate: ssl !== false && ssl.rejectUnauthorized === false,
+        ...(ssl !== false && (ssl.ca || ssl.cert || ssl.key)
+          ? { cryptoCredentialsDetails: { ca: ssl.ca, cert: ssl.cert, key: ssl.key } }
+          : {}),
+      },
       connectionTimeout: CONNECTION_TIMEOUT_MS,
       requestTimeout: CONNECTION_TIMEOUT_MS,
     });

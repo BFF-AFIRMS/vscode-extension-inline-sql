@@ -114,6 +114,43 @@ describe('Database security and cache isolation', () => {
     }
   });
 
+  it('forwards SSL options to the driver and verifies certificates when ssl is true', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'inline-sql-ssl-'));
+    const driver = join(root, 'node_modules/pg');
+    mkdirSync(driver, { recursive: true });
+    writeFileSync(join(driver, 'index.js'), `
+      exports.Client = class {
+        constructor(config) { exports.config = config; }
+        async connect() {}
+        async query() { return { rows: [] }; }
+        async end() {}
+      };
+    `);
+    const configs: Array<{ ssl?: unknown }> = [];
+    vscode.workspace.workspaceFolders = [{ uri: { scheme: 'file', fsPath: root } }];
+    try {
+      for (const ssl of [{ rejectUnauthorized: false }, true, undefined]) {
+        settings.connections = [{ name: 'test', driver: 'postgres', host: 'localhost', database: 'test', ssl }];
+        await manager.refreshSchema();
+        configs.push(requireModule(join(driver, 'index.js')).config);
+      }
+    } finally {
+      vscode.workspace.workspaceFolders = [];
+      rmSync(root, { recursive: true, force: true });
+    }
+    assert.deepStrictEqual(configs[0].ssl, { rejectUnauthorized: false });
+    assert.deepStrictEqual(configs[1].ssl, { rejectUnauthorized: true });
+    assert.strictEqual(configs[2].ssl, false);
+  });
+
+  it('rejects malformed ssl settings', () => {
+    for (const ssl of ['true', 1, [], { rejectUnauthorized: 'no' }, { unknown: true }]) {
+      settings.connections = [{ name: 'test', driver: 'postgres', host: 'localhost', database: 'test', ssl }];
+      assert.strictEqual(manager.getActiveConnectionConfig(), undefined);
+    }
+    assert.strictEqual(errors.length, 5);
+  });
+
   it('reports missing drivers separately from connection failures', () => {
     const missing = db.driverLoadMessage(new db.DriverLoadError('not-installed', 'mysql2/promise', 'x', ['/ws']));
     assert.ok(missing.includes('"mysql2"'), missing);
