@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { findSqlRegionAtOffset } from '../detection/sqlDetector';
 import { documentSqlRegions } from '../configuration';
-import { buildCompletionItems } from './sqlKeywords';
+import { buildCompletionItems, SCHEMA_SORT_PREFIX } from './sqlKeywords';
 import { SchemaInfo } from '../types';
 import {
   SQL_KEYWORD_SET,
@@ -116,7 +116,7 @@ function buildTableCompletionItems(schema: SchemaInfo): vscode.CompletionItem[] 
   return schema.tables.map(table => {
     const item = new vscode.CompletionItem(table.name, vscode.CompletionItemKind.Struct);
     item.detail = `Table${table.schema ? ` (${table.schema})` : ''} — ${table.columns.length} columns`;
-    item.sortText = '0' + table.name;
+    item.sortText = SCHEMA_SORT_PREFIX + table.name;
     return item;
   });
 }
@@ -146,7 +146,7 @@ function buildColumnItems(columns: CompletionColumn[]): vscode.CompletionItem[] 
   return columns.map(col => {
     const item = new vscode.CompletionItem(col.name, vscode.CompletionItemKind.Field);
     if (col.detail) { item.detail = col.detail; }
-    item.sortText = '0' + col.name;
+    item.sortText = SCHEMA_SORT_PREFIX + col.name;
     return item;
   });
 }

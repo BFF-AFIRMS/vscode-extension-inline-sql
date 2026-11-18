@@ -8,6 +8,12 @@ interface SqlKeywordEntry {
   insertText?: string;
 }
 
+/**
+ * Sort prefix for schema-derived items (tables, columns, subquery columns).
+ * It is lower than every built-in prefix so database suggestions rank above keywords.
+ */
+export const SCHEMA_SORT_PREFIX = '0';
+
 const DML_KEYWORDS: SqlKeywordEntry[] = [
   { label: 'SELECT', detail: 'Query data', kind: vscode.CompletionItemKind.Keyword, insertText: 'SELECT $1 FROM $2' },
   { label: 'INSERT INTO', detail: 'Insert data', kind: vscode.CompletionItemKind.Keyword, insertText: 'INSERT INTO $1 ($2) VALUES ($3)' },
@@ -165,9 +171,10 @@ export function buildCompletionItems(): vscode.CompletionItem[] {
 
 function getSortPrefix(kind: vscode.CompletionItemKind): string {
   switch (kind) {
-    case vscode.CompletionItemKind.Keyword: return '0';
-    case vscode.CompletionItemKind.Function: return '1';
-    case vscode.CompletionItemKind.TypeParameter: return '2';
-    default: return '3';
+    // Built-in prefixes start after SCHEMA_SORT_PREFIX so schema items sort first.
+    case vscode.CompletionItemKind.Keyword: return '1';
+    case vscode.CompletionItemKind.Function: return '2';
+    case vscode.CompletionItemKind.TypeParameter: return '3';
+    default: return '4';
   }
 }
