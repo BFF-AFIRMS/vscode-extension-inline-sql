@@ -42,6 +42,16 @@ SQL keywords, types, functions, and literals are highlighted inside string liter
 
 Triggers on `.` (for `table.column`) and `Space` (after keywords).
 
+### Hover Documentation
+
+Hovering a table, alias, or column inside a detected SQL string shows documentation built from the active connection's cached schema:
+
+- **Table or alias** — the database schema plus every column with its type and nullability
+- **Column** — the column type, nullability, and the table it belongs to
+- **Subquery alias** — the columns the subquery projects, resolved from the SQL text alone (no database connection required)
+
+Hovering outside a SQL region, inside a SQL string literal or comment, or on a name the schema does not contain shows nothing, so the host language's own hover still works. Schema-aware hovers need the same connection and workspace-trust setup as schema completion.
+
 ### Validation / Linting
 
 - Real-time SQL syntax checking

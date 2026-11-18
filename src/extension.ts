@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SqlDecorationProvider } from './highlighting/sqlDecorationProvider';
 import { SqlCompletionProvider } from './completion/sqlCompletionProvider';
+import { SqlHoverProvider } from './hover/sqlHoverProvider';
 import { ConnectionManager } from './db/connectionManager';
 import { SqlDiagnosticsProvider } from './validation/sqlDiagnosticsProvider';
 import { SqlFormattingProvider } from './formatting/sqlFormattingProvider';
@@ -25,6 +26,13 @@ export function activate(context: vscode.ExtensionContext): void {
     '.', ' '  // Trigger on dot (table.column) and space (after keywords)
   );
   context.subscriptions.push(completionDisposable);
+
+  // SQL hover documentation for tables, aliases and columns
+  const hoverDisposable = vscode.languages.registerHoverProvider(
+    SUPPORTED_LANGUAGES.map(lang => ({ language: lang })),
+    new SqlHoverProvider(() => connectionManager.getSchema())
+  );
+  context.subscriptions.push(hoverDisposable);
 
   // SQL validation/linting
   const diagnosticsProvider = new SqlDiagnosticsProvider();
