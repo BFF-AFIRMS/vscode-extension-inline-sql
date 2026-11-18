@@ -148,6 +148,35 @@ describe('Database security and cache isolation', () => {
     }
   });
 
+  it('resolves globally installed drivers from npm_config_prefix', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'inline-sql-prefix-'));
+    const modules = process.platform === 'win32' ? join(root, 'node_modules') : join(root, 'lib', 'node_modules');
+    const driver = join(modules, 'pg');
+    mkdirSync(driver, { recursive: true });
+    writeFileSync(join(driver, 'package.json'), '{"name":"pg","main":"index.js"}');
+    writeFileSync(join(driver, 'index.js'), `
+      exports.Client = class {
+        async connect() {}
+        async query() { return { rows: [{table_schema:'public',table_name:'prefix_users',column_name:'id',data_type:'int',is_nullable:'NO'}] }; }
+        async end() {}
+      };
+    `);
+    const previousPrefix = process.env.npm_config_prefix;
+    const previousNodePath = process.env.NODE_PATH;
+    process.env.npm_config_prefix = root;
+    delete process.env.NODE_PATH;
+    vscode.workspace.workspaceFolders = [];
+    try {
+      const schema = await manager.getSchema();
+      assert.strictEqual(schema?.tables[0].name, 'prefix_users');
+    } finally {
+      if (previousPrefix === undefined) { delete process.env.npm_config_prefix; } else { process.env.npm_config_prefix = previousPrefix; }
+      if (previousNodePath === undefined) { delete process.env.NODE_PATH; } else { process.env.NODE_PATH = previousNodePath; }
+      vscode.workspace.workspaceFolders = [];
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('logs failure codes and redacts the configured password', async () => {
     settings.connections = [{ name: 'test', driver: 'postgres', host: 'localhost', database: 'test', password: 'super-secret' }];
     Object.assign(manager, {

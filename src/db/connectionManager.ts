@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { DbConnectionConfig, SchemaInfo, TableInfo } from '../types';
 
-import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import { SchemaCache } from './schemaCache';
@@ -36,33 +37,78 @@ function requireFrom(dir: string): NodeJS.Require {
   return createRequire(path.join(dir, 'package.json'));
 }
 
+/** Ask npm where its global packages live; silent when npm is unavailable. */
+function npmGlobalRoot(): string | undefined {
+  const binary = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  try {
+    const out = execFileSync(binary, ['root', '-g'], {
+      encoding: 'utf8',
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return out || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Well-known locations for global packages when npm is not on the extension host's
+ * `PATH`. These contain packages directly (`<dir>/<pkg>/`), not a `node_modules` child.
+ */
+function commonGlobalDirs(): string[] {
+  const dirs: string[] = [];
+  if (process.platform === 'win32') {
+    if (process.env.APPDATA) { dirs.push(path.join(process.env.APPDATA, 'npm', 'node_modules')); }
+    return dirs;
+  }
+  dirs.push('/usr/local/lib/node_modules', '/usr/lib/node_modules');
+  const home = process.env.HOME;
+  if (home) {
+    dirs.push(path.join(home, '.npm-global', 'lib', 'node_modules'));
+    try {
+      for (const version of readdirSync(path.join(home, '.nvm', 'versions', 'node'))) {
+        dirs.push(path.join(home, '.nvm', 'versions', 'node', version, 'lib', 'node_modules'));
+      }
+    } catch { /* nvm is optional */ }
+  }
+  return dirs;
+}
+
 /**
  * Directories to resolve drivers from, most specific first: workspace folders, then
- * `NODE_PATH` entries, then the Node installation's own package directory (which is
- * where `npm install -g` puts them).
+ * `NODE_PATH` and `npm_config_prefix`, then `npm root -g`, then well-known global
+ * locations, then the running Node installation's package directory. Yields lazily so
+ * `npm root -g` is only spawned when the earlier, cheaper tiers fail to resolve.
  */
-function driverRoots(): DriverRoot[] {
-  const roots: DriverRoot[] = [];
+function* driverRoots(): Generator<DriverRoot> {
+  const seen = new Set<string>();
+  function* emit(dir: string, direct: boolean): Generator<DriverRoot> {
+    if (seen.has(dir)) { return; }
+    seen.add(dir);
+    yield { dir, direct };
+  }
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    if (folder.uri.scheme === 'file') { roots.push({ dir: folder.uri.fsPath, direct: false }); }
+    if (folder.uri.scheme === 'file') { yield* emit(folder.uri.fsPath, false); }
   }
   for (const entry of (process.env.NODE_PATH ?? '').split(path.delimiter)) {
-    if (entry) { roots.push({ dir: entry, direct: true }); }
+    if (entry) { yield* emit(entry, true); }
   }
-  // `<prefix>/lib/node_modules` on POSIX, `<prefix>/node_modules` on Windows.
-  const prefix = path.dirname(path.dirname(process.execPath));
-  roots.push({
-    dir: process.platform === 'win32'
-      ? path.join(prefix, 'node_modules')
-      : path.join(prefix, 'lib', 'node_modules'),
-    direct: true,
-  });
-  const seen = new Set<string>();
-  return roots.filter(root => {
-    if (seen.has(root.dir)) { return false; }
-    seen.add(root.dir);
-    return true;
-  });
+  const prefix = process.env.npm_config_prefix;
+  if (prefix) {
+    yield* emit(
+      process.platform === 'win32' ? path.join(prefix, 'node_modules') : path.join(prefix, 'lib', 'node_modules'),
+      true,
+    );
+  }
+  const npmRoot = npmGlobalRoot();
+  if (npmRoot) { yield* emit(npmRoot, true); }
+  for (const dir of commonGlobalDirs()) { yield* emit(dir, true); }
+  const execPrefix = path.dirname(path.dirname(process.execPath));
+  yield* emit(
+    process.platform === 'win32' ? path.join(execPrefix, 'node_modules') : path.join(execPrefix, 'lib', 'node_modules'),
+    true,
+  );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -272,7 +318,7 @@ export class ConnectionManager implements vscode.Disposable {
       }
       this.nextRetryTime = Date.now() + RETRY_BACKOFF_MS;
       if (err instanceof DriverLoadError) {
-        this.log(`Driver "${err.moduleName}" unavailable for "${connConfig.name}" (${err.reason}); searched: ${err.searched.length ? err.searched.join(', ') : 'no directories'}.`);
+        this.log(`Driver "${err.moduleName}" unavailable for "${connConfig.name}" (${err.reason}); node: ${process.execPath}; searched: ${err.searched.length ? err.searched.join(', ') : 'no directories'}.`);
         vscode.window.showErrorMessage(driverLoadMessage(err));
         return undefined;
       }
