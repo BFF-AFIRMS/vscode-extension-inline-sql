@@ -41,4 +41,25 @@ describe('SQL completion and configuration', () => {
     assert.strictEqual(await provider.provideCompletionItems(document, {} as VSCode.Position, {} as VSCode.CancellationToken, {} as VSCode.CompletionContext), undefined);
     assert.strictEqual(calls, 1);
   });
+
+  it('resolves a table alias before a dot to the aliased table columns', async () => {
+    const source = 'const q = "SELECT * FROM stock AS plot WHERE plot.";';
+    const document = { languageId: 'typescript', getText: () => source, offsetAt: () => source.lastIndexOf('"') } as unknown as VSCode.TextDocument;
+    const provider = new completion.SqlCompletionProvider(() => ({
+      tables: [{ name: 'stock', columns: [{ name: 'stock_id', dataType: 'int', nullable: false }] }],
+      lastUpdated: Date.now(),
+    }));
+    const items = await provider.provideCompletionItems(document, {} as VSCode.Position, { isCancellationRequested: false } as VSCode.CancellationToken, {} as VSCode.CompletionContext);
+    assert.ok(items?.some(item => item.label === 'stock_id'));
+  });
+
+  it('completes columns of a joined subquery through its alias without a database', async () => {
+    const source = 'const q = "SELECT * FROM stock AS plot LEFT JOIN (SELECT subject_id AS subplot_id, object_id AS parent_id FROM stock_relationship) AS subplot_parent ON plot.stock_id = subplot_parent.subplot_id WHERE subplot_parent.";';
+    const document = { languageId: 'typescript', getText: () => source, offsetAt: () => source.lastIndexOf('"') } as unknown as VSCode.TextDocument;
+    const provider = new completion.SqlCompletionProvider();
+    const items = await provider.provideCompletionItems(document, {} as VSCode.Position, { isCancellationRequested: false } as VSCode.CancellationToken, {} as VSCode.CompletionContext);
+    const labels = items?.map(item => item.label) ?? [];
+    assert.ok(labels.includes('subplot_id'), labels.join(','));
+    assert.ok(labels.includes('parent_id'), labels.join(','));
+  });
 });
